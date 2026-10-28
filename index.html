@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Catch the ink. A tiny game from Inkspire for Delhi Horror Con.">
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;padding:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Inkspire Ink Drop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Wet+Paint&family=Space+Mono:wght@400;700&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap">
+<style>
+  /* Layout: full-screen canvas game. Six inkpots hang from the top edge, one pot slides along the bottom.
+     Overlay cards (start, win, lose) sit centered over the live game. Single look: ink on bone paper. */
+  :root {
+    --paper: #e9e3d4;
+    --paper-deep: #d6cfbb;
+    --ink: #17141f;
+    --ink-soft: #3a3350;
+    --blood: #a8231b;
+    --display: "Rubik Wet Paint", "Impact", sans-serif;
+    --body: "Newsreader", Georgia, serif;
+    --mono: "Space Mono", ui-monospace, monospace;
+    color-scheme: light;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.45;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  #stage {
+    position: relative;
+    height: 100%;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: ew-resize;
+  }
+  .hud {
+    position: absolute;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .hud { flex-wrap: wrap; row-gap: 8px; }
+  .hud .group { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .spills { display: flex; gap: 4px; }
+  .spills i {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--ink);
+    background: transparent;
+    display: block;
+  }
+  .spills i.on { background: var(--blood); border-color: var(--blood); }
+  #count { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 72px 90px;
+    box-sizing: border-box;
+  }
+  .overlay[hidden] { display: none; }
+  .mute {
+    pointer-events: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    width: 36px; height: 36px; padding: 0; display: grid; place-items: center; flex: 0 0 auto;
+    cursor: pointer;
+  }
+  .mute:focus-visible { outline: 3px solid var(--blood); outline-offset: 2px; }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    box-shadow: 6px 6px 0 var(--ink);
+    padding: 22px 20px 20px;
+    min-width: 0;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0 0 6px;
+  }
+  h1, h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 34px;
+    line-height: 1.05;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  p { margin: 0 0 14px; }
+  .btn {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    padding: 12px 18px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--ink-soft); border-color: var(--ink-soft); }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn.ghost:hover { background: var(--paper-deep); border-color: var(--ink); }
+  .btn:focus-visible { outline: 3px solid var(--blood); outline-offset: 3px; }
+  .code-row { display: flex; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+  .code {
+    flex: 1 1 150px;
+    min-width: 0;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 10px 8px;
+    border: 3px dashed var(--blood);
+    color: var(--blood);
+    user-select: all;
+    -webkit-user-select: all;
+    overflow-wrap: anywhere;
+  }
+  .copy { flex: 0 0 auto; width: auto; padding: 10px 14px; }
+  .fine { font-size: 14px; color: var(--ink-soft); margin: 12px 0 0; }
+  .stack { display: grid; gap: 10px; }
+</style>
+
+</head>
+<body>
+<main id="stage">
+  <canvas id="game" aria-label="Ink catching game. Move your pointer or finger left and right to slide the pot under the falling ink."></canvas>
+
+  <div class="hud" aria-live="polite">
+    <div class="group"><span>Spilled</span><span class="spills" id="spills"></span></div>
+    <button class="mute" id="mute" type="button" aria-pressed="false" aria-label="Sound on"></button>
+    <div class="group"><span>Pot</span><span id="count">0 / 15</span></div>
+  </div>
+
+  <section class="overlay" id="start">
+    <div class="card">
+      <p class="eyebrow">Inkspire &middot; Delhi Horror Con</p>
+      <h1>Catch the ink</h1>
+      <p>Six pots are leaking. Drag left and right to slide the empty pot under the drips. Fill it before you spill 7 drops and the stall discount is yours. You get one try per phone, so make it count.</p>
+      <button class="btn" id="startBtn" type="button">Start</button>
+    </div>
+  </section>
+
+  <section class="overlay" id="win" hidden>
+    <div class="card">
+      <p class="eyebrow">Pot full</p>
+      <h2>Not a drop wasted</h2>
+      <p>Show this code at the Inkspire stall.</p>
+      <div class="code-row">
+        <div class="code" id="codeText">CODE</div>
+        <button class="btn ghost copy" id="copyBtn" type="button">Copy</button>
+      </div>
+      <p class="fine" id="offerText"></p>
+      <p class="fine">This is your only code. Take a screenshot so you don't lose it.</p>
+    </div>
+  </section>
+
+  <section class="overlay" id="lose" hidden>
+    <div class="card">
+      <p class="eyebrow">Out of ink</p>
+      <h2>Too many spills</h2>
+      <p>The floor drank it all. Each phone gets one try, so there is no code this time. Come say hi at the Inkspire stall anyway.</p>
+      
+    </div>
+  </section>
+</main>
+
+<script>
+  // Studio settings: change these before the flyer goes to print.
+  var CFG = {
+    goal: 15,                 // drops needed to fill the pot
+    maxSpills: 7,             // drops allowed to hit the floor
+    prefix: "INK",             // every code starts with this; each phone gets its own after it
+    offer: "15% off at the Inkspire stall, Delhi Horror Con."
+  };
+
+  var C = {
+    paper: "#e9e3d4", paperDeep: "#d6cfbb", ink: "#17141f", inkSoft: "#3a3350", blood: "#a8231b"
+  };
+
+  var canvas = document.getElementById("game");
+  var ctx = canvas.getContext("2d");
+  var stage = document.getElementById("stage");
+  var W = 0, H = 0, dpr = 1;
+  var NPOTS = 6;
+  var pots = [], drops = [], parts = [], stains = [];
+  var catcher = { x: 0, tx: 0, w: 80, h: 62, mouth: 0 };
+  var floorY = 0;
+  var running = false, filled = 0, spilled = 0, ended = false;
+  var last = 0, clock = 0;
+
+  var el = {
+    start: document.getElementById("start"),
+    win: document.getElementById("win"),
+    lose: document.getElementById("lose"),
+    count: document.getElementById("count"),
+    spills: document.getElementById("spills"),
+    code: document.getElementById("codeText"),
+    offer: document.getElementById("offerText"),
+    copy: document.getElementById("copyBtn")
+  };
+  var myCode = "";
+  el.offer.textContent = CFG.offer;
+
+  function buildSpills() {
+    el.spills.innerHTML = "";
+    for (var i = 0; i < CFG.maxSpills; i++) el.spills.appendChild(document.createElement("i"));
+  }
+  function updateHud() {
+    el.count.textContent = filled + " / " + CFG.goal;
+    var dots = el.spills.children;
+    for (var i = 0; i < dots.length; i++) dots[i].className = i < spilled ? "on" : "";
+  }
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function interval() {
+    var p = filled / CFG.goal;
+    var base = 5.0 - 1.8 * p;
+    return base * rand(0.55, 1.45);
+  }
+
+  function layout() {
+    var r = canvas.getBoundingClientRect();
+    W = r.width; H = r.height;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var pw = clamp(W / 8.5, 34, 58);
+    pots = [];
+    for (var i = 0; i < NPOTS; i++) {
+      var old = pots[i];
+      pots.push({
+        x: W * (i + 1) / (NPOTS + 1),
+        w: pw,
+        h: pw * 0.95,
+        tilt: rand(-0.06, 0.06),
+        wait: rand(0.4, 2.8),
+        swell: 0
+      });
+    }
+    catcher.w = clamp(W * 0.28, 80, 116);
+    catcher.h = catcher.w * 0.85;
+    floorY = H - 66;
+    catcher.mouth = floorY - catcher.h - 6;
+    if (!catcher.x) { catcher.x = catcher.tx = W / 2; }
+    catcher.x = clamp(catcher.x, catcher.w / 2, W - catcher.w / 2);
+    catcher.tx = clamp(catcher.tx, catcher.w / 2, W - catcher.w / 2);
+    stains = [];
+  }
+
+  function nozzleY(p) { return p.h + 4; }
+
+  function update(dt) {
+    var g = 780 * clamp(H / 700, 0.8, 1.3);
+    // pots
+    for (var i = 0; i < pots.length; i++) {
+      var p = pots[i];
+      if (p.swell > 0) {
+        p.swell += dt;
+        if (p.swell >= 0.7) {
+          drops.push({ x: p.x, y: nozzleY(p) + 8, py: nozzleY(p) + 8, vy: 40, r: 6.5 });
+          sfx.drip();
+          p.swell = 0;
+          p.wait = interval();
+        }
+      } else {
+        p.wait -= dt;
+        if (p.wait <= 0) p.swell = 0.001;
+      }
+    }
+    // catcher easing
+    catcher.x += (catcher.tx - catcher.x) * Math.min(1, dt * 16);
+
+    // drops
+    for (var j = drops.length - 1; j >= 0; j--) {
+      var d = drops[j];
+      d.py = d.y;
+      d.vy += g * dt;
+      d.y += d.vy * dt;
+      var dx = Math.abs(d.x - catcher.x);
+      var neckH = catcher.w * 0.26, bellyH = catcher.w * 0.52;
+      var inX = dx <= bellyH + 2;
+      // drops that land in the neck go straight in; drops that hit the shoulder roll in
+      var cy = catcher.mouth + (dx <= neckH ? 0 : catcher.h * 0.12 + clamp((dx - neckH) / (bellyH - neckH), 0, 1) * catcher.h * 0.22);
+      if (d.py + d.r <= cy && d.y + d.r >= cy && inX) {
+        drops.splice(j, 1);
+        splash(d.x, cy + 2, 7, -1);
+        sfx.catchInk(filled / CFG.goal);
+        if (running) {
+          filled++;
+          updateHud();
+          if (filled >= CFG.goal) finish(true);
+        }
+        continue;
+      }
+      if (d.y + d.r >= floorY) {
+        drops.splice(j, 1);
+        splash(d.x, floorY, 9, 1);
+        sfx.splat();
+        stains.push({ x: d.x, r: rand(7, 13), a: rand(0.5, 1) });
+        if (stains.length > 14) stains.shift();
+        if (running) {
+          spilled++;
+          updateHud();
+          if (spilled >= CFG.maxSpills) finish(false);
+        }
+      }
+    }
+    // particles
+    for (var k = parts.length - 1; k >= 0; k--) {
+      var q = parts[k];
+      q.vy += 900 * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+      q.life -= dt;
+      if (q.life <= 0) parts.splice(k, 1);
+    }
+  }
+
+  // ---------- sound (Web Audio, no files) ----------
+  var sfx = (function () {
+    var ac = null, muted = false;
+    var btn = document.getElementById("mute");
+    try { muted = localStorage.getItem("ink-muted") === "1"; } catch (e) {}
+    function label() {
+      btn.setAttribute("aria-label", muted ? "Sound off" : "Sound on");
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>' + (muted ? '<path d="M17 9l5 6M22 9l-5 6"/>' : '<path d="M16.5 8.5a5 5 0 010 7"/><path d="M19 6a9 9 0 010 12"/>') + '</svg>';
+      btn.setAttribute("aria-pressed", muted ? "true" : "false");
+    }
+    function init() {
+      if (!ac) {
+        try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; }
+      }
+      if (ac && ac.state === "suspended") ac.resume();
+    }
+    function tone(f0, f1, dur, type, vol, delay) {
+      if (!ac || muted) return;
+      var t = ac.currentTime + (delay || 0);
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(f1, 20), t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t); o.stop(t + dur + 0.03);
+    }
+    function noise(dur, vol, freq) {
+      if (!ac || muted) return;
+      var n = Math.floor(ac.sampleRate * dur);
+      var buf = ac.createBuffer(1, n, ac.sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var src = ac.createBufferSource(); src.buffer = buf;
+      var f = ac.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 0.8;
+      var g = ac.createGain(); g.gain.value = vol;
+      src.connect(f); f.connect(g); g.connect(ac.destination);
+      src.start();
+    }
+    btn.addEventListener("click", function () {
+      muted = !muted;
+      try { localStorage.setItem("ink-muted", muted ? "1" : "0"); } catch (e) {}
+      label();
+      if (!muted) { init(); tone(520, 780, 0.12, "sine", 0.12); }
+    });
+    label();
+    return {
+      init: init,
+      drip: function () { tone(1500, 900, 0.05, "sine", 0.035); },
+      catchInk: function (p) { tone(260 + 340 * p, 130 + 200 * p, 0.16, "sine", 0.22); },
+      splat: function () { noise(0.14, 0.2, 600); tone(150, 55, 0.12, "triangle", 0.12); },
+      win: function () {
+        var notes = [392, 494, 587, 784];
+        for (var i = 0; i < notes.length; i++) tone(notes[i], notes[i], 0.26, "triangle", 0.16, i * 0.11);
+      },
+      lose: function () {
+        tone(330, 220, 0.3, "sawtooth", 0.09);
+        tone(247, 110, 0.5, "sawtooth", 0.09, 0.22);
+      }
+    };
+  })();
+
+  function splash(x, y, n, dir) {
+    for (var i = 0; i < n; i++) {
+      parts.push({
+        x: x, y: y,
+        vx: rand(-110, 110),
+        vy: rand(80, 260) * -1,
+        r: rand(1.5, 3.2),
+        life: rand(0.25, 0.5)
+      });
+    }
+  }
+
+  function finish(won) {
+    if (ended) return;
+    ended = true;
+    recordResult(won);
+    running = false;
+    setTimeout(function () {
+      (won ? el.win : el.lose).hidden = false;
+      sfx[won ? "win" : "lose"]();
+    }, won ? 450 : 350);
+  }
+
+  function reset() {
+    filled = 0; spilled = 0; ended = false;
+    drops = []; parts = []; stains = [];
+    for (var i = 0; i < pots.length; i++) { pots[i].swell = 0; pots[i].wait = rand(0.3, 2.2); }
+    updateHud();
+  }
+
+  // ---------- one try and one code per phone ----------
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 characters, no 0/O/1/I
+  function makeCode() {
+    var b = new Uint8Array(4), s = "", sum = 0, i;
+    (window.crypto || window.msCrypto).getRandomValues(b);
+    for (i = 0; i < 4; i++) s += ALPHA.charAt(b[i] % 32);
+    for (i = 0; i < 4; i++) sum += (ALPHA.indexOf(s.charAt(i)) + 1) * (i + 3);
+    return CFG.prefix + "-" + s + "-" + ALPHA.charAt(sum % 32);
+  }
+  function recordResult(won) {
+    if (won) {
+      myCode = makeCode();
+      el.code.textContent = myCode;
+      store.set("ink-result", myCode);
+    } else {
+      
+    }
+  }
+  function showResult() {
+    if (location.hash === "#reset") { store.set("ink-result", ""); store.set("ink-played", ""); }
+    var r = store.get("ink-result");
+    if (!r && store.get("ink-played")) { r = "lose"; store.set("ink-result", r); }
+    if (!r) return false;
+    el.start.hidden = true;
+    if (r === "lose") {
+      el.lose.hidden = false;
+    } else {
+      myCode = r;
+      el.code.textContent = r;
+      el.win.hidden = false;
+    }
+    return true;
+  }
+
+  function begin() {
+    if (running || store.get("ink-played")) return;
+    store.set("ink-played", "1");
+    
+    sfx.init();
+    reset();
+    el.start.hidden = true;
+    el.win.hidden = true;
+    el.lose.hidden = true;
+    running = true;
+  }
+
+  // ---------- drawing ----------
+  function drawPot(p) {
+    var x = p.x, w = p.w, h = p.h;
+    ctx.save();
+    ctx.translate(x, 0);
+    ctx.rotate(p.tilt);
+    // body hangs from the top edge
+    ctx.fillStyle = C.ink;
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, -4);
+    ctx.lineTo(w / 2, -4);
+    ctx.lineTo(w / 2 - 3, h - 12);
+    ctx.quadraticCurveTo(w / 2 - 6, h, w * 0.14, h);
+    ctx.lineTo(-w * 0.14, h);
+    ctx.quadraticCurveTo(-w / 2 + 6, h, -w / 2 + 3, h - 12);
+    ctx.closePath();
+    ctx.fill();
+    // label band
+    ctx.fillStyle = C.paper;
+    ctx.fillRect(-w / 2 + 6, h * 0.28, w - 12, h * 0.26);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(-w / 2 + 9, h * 0.28 + 4, w - 18, 2);
+    ctx.fillRect(-w / 2 + 9, h * 0.28 + h * 0.26 - 6, (w - 18) * 0.6, 2);
+    // nozzle
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(-5, h - 2, 10, 7);
+    ctx.restore();
+    // swelling drop
+    if (p.swell > 0) {
+      var t = p.swell / 0.7;
+      var r = 1.5 + 5 * t;
+      var yy = nozzleY(p) + 3 + t * 5;
+      ctx.fillStyle = C.ink;
+      ctx.beginPath();
+      ctx.moveTo(p.x, yy - r * 1.5);
+      ctx.bezierCurveTo(p.x + r, yy - r * 0.2, p.x + r, yy + r, p.x, yy + r);
+      ctx.bezierCurveTo(p.x - r, yy + r, p.x - r, yy - r * 0.2, p.x, yy - r * 1.5);
+      ctx.fill();
+    }
+  }
+
+  function drawDrop(d) {
+    var r = d.r, s = clamp(d.vy / 900, 0, 0.8);
+    ctx.fillStyle = C.ink;
+    ctx.beginPath();
+    ctx.moveTo(d.x, d.y - r * (1.7 + s));
+    ctx.bezierCurveTo(d.x + r * 1.05, d.y - r * 0.3, d.x + r * 1.05, d.y + r, d.x, d.y + r);
+    ctx.bezierCurveTo(d.x - r * 1.05, d.y + r, d.x - r * 1.05, d.y - r * 0.3, d.x, d.y - r * (1.7 + s));
+    ctx.fill();
+  }
+
+  function catcherPath(x, top) {
+    var w = catcher.w, h = catcher.h;
+    ctx.beginPath();
+    // traditional matka: flared lip, narrow neck, round belly, small flat base
+    var by = top + h - 3, lipH = w * 0.34, neckH = w * 0.26, bellyH = w * 0.52;
+    ctx.moveTo(x - lipH, top);
+    ctx.lineTo(x + lipH, top);
+    ctx.quadraticCurveTo(x + neckH + 2, top + h * 0.04, x + neckH, top + h * 0.12);
+    ctx.bezierCurveTo(x + neckH, top + h * 0.22, x + bellyH, top + h * 0.2, x + bellyH, top + h * 0.5);
+    ctx.bezierCurveTo(x + bellyH, top + h * 0.8, x + w * 0.36, by, x + w * 0.2, by);
+    ctx.lineTo(x - w * 0.2, by);
+    ctx.bezierCurveTo(x - w * 0.36, by, x - bellyH, top + h * 0.8, x - bellyH, top + h * 0.5);
+    ctx.bezierCurveTo(x - bellyH, top + h * 0.2, x - neckH, top + h * 0.22, x - neckH, top + h * 0.12);
+    ctx.quadraticCurveTo(x - neckH - 2, top + h * 0.04, x - lipH, top);
+    ctx.closePath();
+  }
+
+  function drawCatcher() {
+    var x = catcher.x, top = catcher.mouth, w = catcher.w, h = catcher.h;
+    // empty interior
+    catcherPath(x, top);
+    ctx.fillStyle = C.paperDeep;
+    ctx.fill();
+    // painted bands and a row of dots around the belly
+    ctx.save();
+    catcherPath(x, top);
+    ctx.clip();
+    ctx.strokeStyle = C.inkSoft;
+    ctx.fillStyle = C.inkSoft;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - w * 0.6, top + h * 0.4); ctx.quadraticCurveTo(x, top + h * 0.5, x + w * 0.6, top + h * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - w * 0.6, top + h * 0.68); ctx.quadraticCurveTo(x, top + h * 0.78, x + w * 0.6, top + h * 0.68); ctx.stroke();
+    for (var k = -3; k <= 3; k++) {
+      var t = k / 3.5;
+      ctx.beginPath();
+      ctx.arc(x + t * w * 0.42, top + h * 0.54 + (1 - t * t) * h * 0.05 + h * 0.02, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    // ink level
+    var lvl = clamp(filled / CFG.goal, 0, 1);
+    if (lvl > 0) {
+      ctx.save();
+      catcherPath(x, top);
+      ctx.clip();
+      var yTop = top + h - lvl * (h - 4);
+      ctx.fillStyle = C.ink;
+      ctx.beginPath();
+      ctx.moveTo(x - w, top + h + 2);
+      ctx.lineTo(x - w, yTop);
+      for (var px = -w; px <= w; px += 6) {
+        ctx.lineTo(x + px, yTop + Math.sin(clock * 5 + px * 0.12) * 1.6);
+      }
+      ctx.lineTo(x + w, top + h + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    // outline
+    catcherPath(x, top);
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = C.ink;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    // rim
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(x - w * 0.34 - 3, top - 5, w * 0.68 + 6, 8);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // paper grain: faint horizontal fibres
+    ctx.fillStyle = "rgba(23,20,31,0.035)";
+    for (var gy = 40; gy < H; gy += 34) ctx.fillRect(0, gy, W, 1);
+
+    // top ledge the pots hang from
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(0, 0, W, 5);
+
+    // floor line + stains
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(0, floorY, W, 3);
+    for (var i = 0; i < stains.length; i++) {
+      var s = stains[i];
+      ctx.globalAlpha = s.a;
+      ctx.beginPath();
+      ctx.ellipse(s.x, floorY + 2, s.r * 1.6, s.r * 0.55, 0, Math.PI, 0);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (var a = 0; a < pots.length; a++) drawPot(pots[a]);
+    for (var b = 0; b < drops.length; b++) drawDrop(drops[b]);
+    drawCatcher();
+    ctx.fillStyle = C.ink;
+    for (var c = 0; c < parts.length; c++) {
+      var q = parts[c];
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function frame(ts) {
+    if (!last) last = ts;
+    var dt = Math.min(0.033, (ts - last) / 1000);
+    last = ts;
+    clock += dt;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- input ----------
+  function moveTo(clientX) {
+    var r = canvas.getBoundingClientRect();
+    catcher.tx = clamp(clientX - r.left, catcher.w / 2, W - catcher.w / 2);
+  }
+  canvas.addEventListener("pointerdown", function (e) { moveTo(e.clientX); });
+  canvas.addEventListener("pointermove", function (e) { moveTo(e.clientX); });
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") catcher.tx = clamp(catcher.tx - 50, catcher.w / 2, W - catcher.w / 2);
+    if (e.key === "ArrowRight") catcher.tx = clamp(catcher.tx + 50, catcher.w / 2, W - catcher.w / 2);
+  });
+  window.addEventListener("resize", layout);
+
+  document.getElementById("startBtn").addEventListener("click", begin);
+  
+  
+
+  el.copy.addEventListener("click", function () {
+    function fallback() {
+      var range = document.createRange();
+      range.selectNodeContents(el.code);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      el.copy.textContent = "Selected";
+    }
+    try {
+      navigator.clipboard.writeText(myCode).then(function () {
+        el.copy.textContent = "Copied";
+        setTimeout(function () { el.copy.textContent = "Copy"; }, 1600);
+      }, fallback);
+    } catch (err) { fallback(); }
+  });
+
+  buildSpills();
+  showResult();
+  
+  updateHud();
+  layout();
+  requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
